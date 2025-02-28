@@ -1,0 +1,93 @@
+// This file is part of www.nand2tetris.org
+// and the book "The Elements of Computing Systems"
+// by Nisan and Schocken, MIT Press.
+// File name: projects/2/ALU.hdl
+/**
+ * ALU (Arithmetic Logic Unit):
+ * Computes out = one of the following functions:
+ *                0, 1, -1,
+ *                x, y, !x, !y, -x, -y,
+ *                x + 1, y + 1, x - 1, y - 1,
+ *                x + y, x - y, y - x,
+ *                x & y, x | y
+ * on the 16-bit inputs x, y,
+ * according to the input bits zx, nx, zy, ny, f, no.
+ * In addition, computes the two output bits:
+ * if (out == 0) zr = 1, else zr = 0
+ * if (out < 0)  ng = 1, else ng = 0
+ */
+// Implementation: Manipulates the x and y inputs
+// and operates on the resulting values, as follows:
+// if (zx == 1) sets x = 0        // 16-bit constant
+// if (nx == 1) sets x = !x       // bitwise not
+// if (zy == 1) sets y = 0        // 16-bit constant
+// if (ny == 1) sets y = !y       // bitwise not
+// if (f == 1)  sets out = x + y  // integer 2's complement addition
+// if (f == 0)  sets out = x & y  // bitwise and
+// if (no == 1) sets out = !out   // bitwise not
+
+CHIP ALU {
+    IN  
+        x[16], y[16],  // 16-bit inputs        
+        zx, // zero the x input?
+        nx, // negate the x input?
+        zy, // zero the y input?
+        ny, // negate the y input?
+        f,  // compute (out = x + y) or (out = x & y)?
+        no; // negate the out output?
+    OUT 
+        out[16], // 16-bit output
+        zr,      // if (out == 0) equals 1, else 0
+        ng;      // if (out < 0)  equals 1, else 0
+
+    PARTS:
+    // zx / zy = 1 => x = AND(x, Not(x)) ?
+    // nx / ny = 1 => x = Not(x)
+    // f = 1 => Add16 , f = 0 => AND (x, y)
+    // no = 1 => Not(o)
+
+    // Mux is basically an if statment
+    // first, we do both "if" and "else" cases
+    // and then let the mux decide (based on the sel) for us if we will use modifed or not modified version of the x from now on
+    // we "don't care" if x1 will be the modified version or the same as x
+
+    // zx & zy
+    Not16(in= x, out= notX);
+    Not16(in= y, out= notY);
+
+    And16(a= x, b= notX, out= zeroX);
+    Mux16(a= x, b= zeroX, sel= zx, out= x1);
+
+    And16(a= y, b= notY, out= zeroY);
+    Mux16(a= y, b= zeroY, sel= zy, out= y1);
+
+
+    // nx & zy
+    Not16(in= x1, out= notX1);
+    Not16(in= y1, out= notY1);
+
+    Mux16(a= x1, b= notX1, sel= nx, out= x2);
+    Mux16(a= y1, b= notY1, sel= ny, out= y2);
+
+
+    // f
+    And16(a= x2, b= y2, out= o1);
+    Add16(a = x2, b = y2, out = o2);
+    Mux16(a= o1, b= o2, sel= f, out= o3);
+
+
+    // no (& ng: firt bit = 1)
+    Not16(in= o3, out= Noto3);
+    Mux16(a= o3, b= Noto3, sel= no, out= out, out[15] = ng, out[0..7] = part1, out[8..15] = part2);
+
+
+    // zr: if every bit in out is 0 then "out or out" = 0
+    // otherwise (out has one or more 1) = 1
+    // We don't have built-in Or16Way so we make it by using two Or8Way and one or with outputs from the two Or8Ways
+    // Or8Way just do or on every bit in bus
+    Or8Way(in= part1, out= or1);
+    Or8Way(in= part2, out= or2);
+    Or(a= or1, b= or2, out= or3);
+    Not(in= or3, out= zr);
+    
+}
